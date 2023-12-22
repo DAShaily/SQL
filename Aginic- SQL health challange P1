@@ -1,0 +1,148 @@
+--Q1- How many people are allergic to eggs or fish? (table = allergies)
+
+/*
+SELECT COUNT(PATIENT) AS Count_Pat_Allergies
+FROM allergies 
+WHERE (DESCRIPTION ilike '%egg%' or 
+DESCRIPTION ilike '%fish%')
+*/
+
+----------------------------------------------
+--Q2- How many people no longer have allergies to something they 
+--previously had? (table = allergies)
+
+/*
+SELECT COUNT(PATIENT) AS Count_Pat_Alrgy_Nomore
+FROM allergies 
+WHERE STOP is not NULL
+*/
+
+---------------------------------------------
+--Q3- How many people have more than 3 currently active conditions? 
+--(table = conditions)
+
+/*
+WITH cte3 AS
+(
+SELECT PATIENT AS Pat_With_3_Condition,
+       COUNT(PATIENT) AS Count_Pat_Conditions 
+FROM conditions 
+WHERE STOP is NULL
+GROUP BY PATIENT
+HAVING COUNT(*) > 3
+)
+SELECT COUNT(Pat_With_3_Condition) AS Tot_Count_Pat_With_3_Conditions
+FROM cte3
+*/
+
+-----------------------------------------------------------------
+--Q4--How many people had a procedure from 1st January 2016 -> 31st Dec 2018 (inclusive)?
+--(table = procedures) 
+
+/*
+ SELECT COUNT(*) As Total_Procedures
+ FROM Procedures
+ WHERE Date BETWEEN '2016-01-01' and '2018-12-31' 
+*/
+
+--Q4- ext How many people had at least one procedure, not how many procedures 
+--did they have (total or number of different procedures)
+/*
+select count(distinct Patient) As Count_Atleast_One_Proc from Procedures
+WHERE Date BETWEEN '2016-01-01' and '2018-12-31'
+*/
+
+-------------------------------------------------------------------
+
+--Q5-What is the most common type of procedure performed for each year in that period
+--(1st January 2016 -> 31st Dec 2018 inclusive)? (table = procedures)
+/*
+WITH cte5 AS
+(
+SELECT CODE,DESCRIPTION,
+       YEAR(date) AS Year_proc,
+       COUNT(CODE) over(PARTITION BY CODE,Year(date)) AS Count_code
+       
+FROM procedures
+WHERE YEAR(date) in (2016,2017,2018)
+),
+cte5_1 AS
+(SELECT Year_Proc,Count_code,Description,Code,
+rank() over (PARTITION BY Year_Proc ORDER BY Count_code desc ) As rnk
+FROM cte5)
+SELECT distinct(Year_proc),Description,Code
+FROM cte5_1
+WHERE rnk = 1
+--GROUP By Year_proc
+--ORDER By Count_code desc
+*/
+
+---- avoid 2 partitions. Do one grp by---
+/*
+WITH procedure_yearly_counts as
+ (SELECT COUNT(Code) As Count_Proc,
+        DATE_PART('year',Date) AS Year,
+        Code as Proc_Code
+ FROM Procedures
+ WHERE Date BETWEEN '2016-01-01' and '2018-12-31'
+ GROUP BY Code, DATE_PART('year',Date)
+  --ORDER BY COUNT(Code) DESC
+  ),
+row_partitioned as
+(
+select Year, row_number() over(partition by Year order by count_proc desc) as rownum, count_proc, Proc_Code
+from procedure_yearly_counts
+  )
+select Year, count_proc, Proc_Code from row_partitioned where rownum = 1
+*/
+
+---------------------------------------------------
+--Q6: What percentage of procedures are from recurring patients? (table = procedures)
+/*
+WITH cte6 As
+(
+SELECT PATIENT, (Count(Code)) AS Count_Proc
+FROM procedures
+GROUP BY PATIENT
+HAVING Count(Code) >1
+),
+cte61 AS
+(
+ SELECT COUNT(*) AS Total_Procs,1 as dummy 
+FROM PROCEDURES
+--GROUP BY PATIENT
+),
+cte62 as
+(
+SELECT COUNT(Count_Proc)AS Recur_Count,1 as dummy
+FROM CTE6
+)
+
+SELECT (Recur_Count/Total_Procs)*100 As Percent_Recur_Proc
+FROM cte61
+JOIN cte62
+ON cte61.dummy = cte62.dummy
+
+*/
+-----------------------------------------------------------
+--Q7--What was each person’s first immunization and when did it occur? (table = immunizations)
+/*
+SELECT Patient,min(date) AS First_Immunization
+FROM immunizations
+GROUP by patient
+*/
+
+-----------------------------------------------------------
+--Q8--How many people are allergic to fish (currently) and have had any procedure 
+--in the last 3 years) (tables = allergies, procedures)
+/*
+SELECT count(*) AS Count_Fish_Proc
+FROM Allergies a
+JOIN Procedures p
+ON a.Patient = p.Patient
+WHERE a.Stop IS NULL
+AND a.Description LIKE ('%fish%')
+AND DateDiff ('year',current_date,p.Date) <= 3
+
+*/
+
